@@ -19,6 +19,10 @@ namespace RestaurantOrderingPlatform.Infrastructure.Data.Configurations
             builder.Property(h => h.ChangedAt).IsRequired();
 
             builder.HasIndex(h => h.OrderId);
+
+            builder.Property(x => x.Note).HasMaxLength(500);
+            builder.Property(x => x.Status).HasConversion<string>().HasMaxLength(30);
+            builder.HasIndex(x => new { x.OrderId, x.ChangedAt });
         }
     }
 }

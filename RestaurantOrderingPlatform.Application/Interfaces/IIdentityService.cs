@@ -25,4 +25,11 @@ public interface IIdentityService
     Task UpdateProfileAsync(Guid userId, string fullName, string? phoneNumber);
 
     Task<(string FullName, string Email, string? PhoneNumber)> GetProfileAsync(Guid userId);
+
+    public record UserContact(Guid UserId, string FullName, string Email, string? PhoneNumber);
+
+    Task<UserContact?> GetContactAsync(Guid userId, CancellationToken ct = default);
+
+    Task<IReadOnlyDictionary<Guid, UserContact>> GetContactsAsync(
+        IReadOnlyCollection<Guid> userIds, CancellationToken ct = default);
 }

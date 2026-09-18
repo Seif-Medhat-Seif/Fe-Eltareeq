@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using RestaurantOrderingPlatform.Application.Exceptions;
 using RestaurantOrderingPlatform.Application.Interfaces;
+using static RestaurantOrderingPlatform.Application.Interfaces.IIdentityService;
 
 namespace RestaurantOrderingPlatform.Infrastructure.Identity;
 
@@ -118,6 +120,33 @@ public class IdentityService : IIdentityService
             ?? throw new NotFoundException("User not found.");
 
         return (user.FullName, user.Email!, user.PhoneNumber);
+    }
+
+    public async Task<UserContact?> GetContactAsync(Guid userId, CancellationToken ct = default)
+    {
+        var u = await _userManager.Users
+            .AsNoTracking()
+            .Where(x => x.Id == userId)
+            .Select(x => new UserContact(x.Id, x.FullName, x.Email!, x.PhoneNumber))
+            .FirstOrDefaultAsync(ct);
+
+        return u;
+    }
+
+    // ★ batch — عشان نتجنب N+1 في queue المطعم (20 أوردر = 20 كويري لو عملناها فردي)
+    public async Task<IReadOnlyDictionary<Guid, UserContact>> GetContactsAsync(
+        IReadOnlyCollection<Guid> userIds, CancellationToken ct = default)
+    {
+        if (userIds.Count == 0)
+            return new Dictionary<Guid, UserContact>();
+
+        var list = await _userManager.Users
+            .AsNoTracking()
+            .Where(x => userIds.Contains(x.Id))
+            .Select(x => new UserContact(x.Id, x.FullName, x.Email!, x.PhoneNumber))
+            .ToListAsync(ct);
+
+        return list.ToDictionary(x => x.UserId);
     }
 
     private static AppUser NewAppUser(string fullName, string email, string? phoneNumber) => new()

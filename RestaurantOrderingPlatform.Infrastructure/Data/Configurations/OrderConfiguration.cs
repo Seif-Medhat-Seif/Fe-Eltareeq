@@ -61,6 +61,35 @@ namespace RestaurantOrderingPlatform.Infrastructure.Data.Configurations
                    .WithOne(r => r.Order)
                    .HasForeignKey<Review>(r => r.OrderId)
                    .OnDelete(DeleteBehavior.Restrict);
+
+            builder.Property(x => x.OrderNumber).IsRequired().HasMaxLength(30);
+            builder.HasIndex(x => x.OrderNumber).IsUnique();
+
+            builder.Property(x => x.AddressLabelSnapshot).IsRequired().HasMaxLength(50);
+            builder.Property(x => x.AddressLineSnapshot).IsRequired().HasMaxLength(500);
+            builder.Property(x => x.AddressCitySnapshot).IsRequired().HasMaxLength(100);
+            builder.Property(x => x.AddressLandmarkSnapshot).HasMaxLength(200);
+            builder.Property(x => x.RejectionReason).HasMaxLength(500);
+
+            // ★ Optimistic concurrency — يمنع اتنين employees يغيّروا نفس الأوردر في نفس اللحظة
+            builder.Property(x => x.RowVersion).IsRowVersion();
+
+            // ★ مهم جدًا: enum-as-string من غير MaxLength بيبقى nvarchar(max) = مستحيل يتعمله index
+            builder.Property(x => x.Status)
+                   .HasConversion<string>()
+                   .HasMaxLength(30);
+
+            // ★ الـ index ده هو اللي بيخلي queue المطعم و available deliveries سريعين
+            builder.HasIndex(x => new { x.RestaurantId, x.Status });
+            builder.HasIndex(x => new { x.CustomerId, x.CreatedAt });
+            builder.HasIndex(x => new { x.Status, x.DriverId });   // Module 7 (available deliveries)
+
+            // AddressId بقى nullable + Restrict (الـ snapshot هو مصدر الحقيقة)
+            builder.HasOne<Address>()
+                   .WithMany()
+                   .HasForeignKey(x => x.AddressId)
+                   .IsRequired(false)
+                   .OnDelete(DeleteBehavior.SetNull);
         }
     }
 }

@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using RestaurantOrderingPlatform.Domain.Entities;
 using System.Threading;
 using System.Threading.Tasks;
@@ -29,9 +30,13 @@ namespace RestaurantOrderingPlatform.Application
         DbSet<OrderItem> OrderItems { get; }
         DbSet<OrderStatusHistory> OrderStatusHistories { get; }
         DbSet<Payment> Payments { get; }
+        DbSet<ProcessedWebhook> ProcessedWebhooks { get; }
+
 
         DbSet<Review> Reviews { get; }
         DbSet<ReviewReport> ReviewReports { get; }
+
+        DatabaseFacade Database { get; }
 
         Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
     }

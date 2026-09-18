@@ -24,6 +24,10 @@ namespace RestaurantOrderingPlatform.Infrastructure.Data.Configurations
                    .OnDelete(DeleteBehavior.Restrict);
 
             builder.Property(u => u.UsedAt).IsRequired();
+
+            // ★ ده اللي بيمنع استخدام نفس الكوبون مرتين على نفس الأوردر (double-redemption race)
+            builder.HasIndex(x => x.OrderId).IsUnique();
+            builder.HasIndex(x => new { x.CouponId, x.CustomerId });
         }
     }
 }

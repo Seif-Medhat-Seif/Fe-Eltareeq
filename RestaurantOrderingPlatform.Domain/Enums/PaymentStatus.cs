@@ -10,6 +10,7 @@ namespace RestaurantOrderingPlatform.Domain.Enums
     {
         Initiated,
         Succeeded,
+        Pending,
         Failed
     }
 }

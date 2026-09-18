@@ -21,6 +21,19 @@ namespace RestaurantOrderingPlatform.Infrastructure.Data.Configurations
             builder.Property(p => p.AmountPaid).IsRequired();
             builder.Property(p => p.PaymobTransactionReference).HasMaxLength(100);
             builder.Property(p => p.CreatedAt).IsRequired();
+
+            builder.Property(x => x.PaymobOrderId).HasMaxLength(100);
+            builder.Property(x => x.FailureReason).HasMaxLength(500);
+            builder.Property(x => x.PaymobTransactionReference).HasMaxLength(100);
+
+            builder.Property(x => x.Status).HasConversion<string>().HasMaxLength(30);
+
+            // transaction reference لازم يبقى فريد لو موجود
+            builder.HasIndex(x => x.PaymobTransactionReference)
+                   .IsUnique()
+                   .HasFilter("[PaymobTransactionReference] IS NOT NULL");
+
+            builder.HasIndex(x => x.OrderId);
         }
     }
 }

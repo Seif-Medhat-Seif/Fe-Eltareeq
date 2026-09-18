@@ -35,6 +35,7 @@ namespace RestaurantOrderingPlatform.Infrastructure
         public DbSet<OrderItem> OrderItems => Set<OrderItem>();
         public DbSet<OrderStatusHistory> OrderStatusHistories => Set<OrderStatusHistory>();
         public DbSet<Payment> Payments => Set<Payment>();
+        public DbSet<ProcessedWebhook> ProcessedWebhooks => Set<ProcessedWebhook>();
 
         public DbSet<Review> Reviews => Set<Review>();
         public DbSet<ReviewReport> ReviewReports => Set<ReviewReport>();

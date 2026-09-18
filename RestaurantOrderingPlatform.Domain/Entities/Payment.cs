@@ -18,5 +18,13 @@ public class Payment
     // look up which Payment row a callback belongs to.
     public string? PaymobTransactionReference { get; set; }
 
+    // --- NEW: الـ Paymob "order id" (غير transaction id) — محتاجينه للربط ---
+    public string? PaymobOrderId { get; set; }
+
+    // --- NEW: آخر رسالة خطأ من البوابة (للدعم الفني) ---
+    public string? FailureReason { get; set; }
+
+    // --- NEW: وقت التأكيد ---
+    public DateTime? CompletedAt { get; set; }
     public DateTime CreatedAt { get; set; }
 }

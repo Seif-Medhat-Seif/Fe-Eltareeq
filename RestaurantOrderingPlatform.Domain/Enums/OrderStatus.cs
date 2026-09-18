@@ -8,19 +8,24 @@ namespace RestaurantOrderingPlatform.Domain.Enums
 {
     public enum OrderStatus
     {
-        PendingPayment,
+        PendingPayment = 0,
         Paid,
-        PaymentMismatch,
         Accepted,
-        Rejected,
-        RefundPending,
-        Refunded,
         Preparing,
         Ready,
         DriverAssigned,
         PickedUp,
         OnTheWay,
-        Delivered
+        Delivered,        // terminal (happy path)
+
+        Rejected,
+        RefundPending,
+        Refunded,         // terminal (rejection branch)
+
+        PaymentMismatch,  // Admin review required
+
+        Cancelled,        // NEW — العميل ألغى الأوردر قبل الدفع
+        Expired           // NEW — الأوردر فضل PendingPayment أكتر من مدة معينة
     }
 
 }
