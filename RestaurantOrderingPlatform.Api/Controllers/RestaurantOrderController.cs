@@ -1,6 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using RestaurantOrderingPlatform.Application.DTOs.Order;
+using RestaurantOrderingPlatform.Application.DTOs.Orders;
 using RestaurantOrderingPlatform.Application.Interfaces;
 using RestaurantOrderingPlatform.Domain.Enums;
 

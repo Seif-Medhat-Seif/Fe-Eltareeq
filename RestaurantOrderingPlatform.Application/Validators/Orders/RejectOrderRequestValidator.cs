@@ -1,5 +1,5 @@
 using FluentValidation;
-using RestaurantOrderingPlatform.Application.DTOs.Order;
+using RestaurantOrderingPlatform.Application.DTOs.Orders;
 
 namespace RestaurantOrderingPlatform.Application.Validators.Orders;
 

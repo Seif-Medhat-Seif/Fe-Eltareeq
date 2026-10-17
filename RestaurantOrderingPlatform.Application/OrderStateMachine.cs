@@ -1,7 +1,7 @@
-// Application/Common/OrderStateMachine.cs
+// Application/OrderStateMachine.cs
 using RestaurantOrderingPlatform.Domain.Enums;
 
-namespace RestaurantOrderingPlatform.Application.Common;
+namespace RestaurantOrderingPlatform.Application;
 
 /// <summary>
 /// مصدر الحقيقة الوحيد لانتقالات حالة الأوردر.

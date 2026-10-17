@@ -1,7 +1,6 @@
 // Application/Services/PaymentWebhookService.cs
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using RestaurantOrderingPlatform.Application.Common.Interfaces;
 using RestaurantOrderingPlatform.Application.Interfaces;
 using RestaurantOrderingPlatform.Domain.Entities;
 using RestaurantOrderingPlatform.Domain.Enums;
@@ -9,19 +8,18 @@ using RestaurantOrderingPlatform.Domain.Enums;
 namespace RestaurantOrderingPlatform.Application.Services;
 
 /// <summary>
-/// ده أخطر class في المشروع كله. اقرأ القواعد الأربعة قبل ما تلمسه:
-///
-/// 1) مبنثقش في أي حاجة جاية من الفرونت — إحنا بنثق في التوقيع (HMAC) بس.
-/// 2) الـ handler ده لازم يبقى IDEMPOTENT: Paymob ممكن يبعت نفس الحدث 2 أو 5 مرات.
-///    نفس الحدث مرتين لازم ينتج نفس النتيجة بالظبط، من غير أوردر يتأكد مرتين
-///    ولا واتساب يتبعت مرتين.
-/// 3) الـ endpoint بيرجع 200 دايمًا — حتى لو فشلنا داخليًا. لو رجّعنا 500،
-///    Paymob هيفضل يعيد المحاولة (retry storm) وهيضاعف المشكلة.
-/// 4) مفيش exception بيخرج من هنا للـ Controller.
+/// القواعد (متوافقة مع إرشادات Paymob الرسمية):
+/// 1) التوقيع الأول. توقيع غلط = InvalidSignature (الـ Controller يرد 401).
+/// 2) الـ idempotency key هو obj.id (transaction id) بـ UNIQUE index.
+/// 3) تسجيل الحدث + تغيير حالة الأوردر + CouponUsage + History = transaction واحدة.
+///    لو أي حاجة فيهم فشلت، الـ marker نفسه بيتلغي → إعادة إرسال Paymob بتتعالج طبيعي.
+/// 4) تغيير الحالة بـ compare-and-set (UPDATE ... WHERE Status = PendingPayment).
+/// 5) 2xx بيتبعت بعد الـ commit بس. فشل تقني = exception = 500 = Paymob يعيد.
 /// </summary>
 public class PaymentWebhookService : IPaymentWebhookService
 {
     private const string ProviderName = "Paymob";
+    private const string ExpectedCurrency = "EGP";   // single-currency V1 (Phase 1)
 
     private readonly IApplicationDbContext _db;
     private readonly IPaymentGateway _gateway;
@@ -43,28 +41,31 @@ public class PaymentWebhookService : IPaymentWebhookService
         _logger = logger;
     }
 
-    public async Task HandlePaymobCallbackAsync(string rawJsonBody, string? hmacFromQuery, CancellationToken ct = default)
+    public async Task<WebhookResult> HandlePaymobCallbackAsync(
+        string rawJsonBody, string? hmacFromQuery, CancellationToken ct = default)
     {
-        // ══ STEP 1: التوقيع ══════════════════════════════════════════════
-        // أي حد يعرف الـ URL بتاعنا يقدر يبعتلنا JSON فيه "success": true.
-        // الـ HMAC هو الحاجة الوحيدة اللي بتفرّق بين Paymob وبين مهاجم.
+        // ── 1) التوقيع ──
         if (!_gateway.TryParseCallback(rawJsonBody, hmacFromQuery, out var cb))
         {
-            _logger.LogWarning("Paymob webhook rejected: invalid or missing HMAC signature.");
-            return;   // 200 بره، بس مفيش أي تأثير
+            _logger.LogWarning("Paymob webhook rejected: invalid HMAC or unreadable payload.");
+            return WebhookResult.InvalidSignature;
         }
 
-        // ══ STEP 2: الـ Idempotency Guard ════════════════════════════════
-        // الغلطة الشائعة هنا:
-        //     if (await _db.ProcessedWebhooks.AnyAsync(...)) return;
-        //     ... process ...
-        //     _db.ProcessedWebhooks.Add(...)
-        // ده race condition جاهز: لو نسختين من الـ webhook وصلوا في نفس اللحظة،
-        // الاتنين هيعدّوا الـ AnyAsync قبل ما أي واحد فيهم يكتب.
-        //
-        // الحل الصح: نحاول نكتب الأول. الـ UNIQUE INDEX على
-        // (Provider, ExternalEventId) هو الحَكَم. لو فشل الـ INSERT →
-        // يبقى في نسخة تانية سبقتنا → نخرج بهدوء.
+        // ── 2) callbacks مش محتاجة فعل ──
+        // pending: مش نتيجة نهائية. وما بنسجلهاش كـ processed عشان الـ callback النهائي
+        // ممكن يجي بنفس الـ transaction id وميتعتبرش duplicate.
+        // refund/void: عمليات تانية بتجي بنفس الشكل بـ success=true — لو اتعاملت كدفع تبقى كارثة.
+        if (cb.IsPending || cb.IsFollowUpTransaction)
+        {
+            _logger.LogInformation(
+                "Paymob callback ignored (pending={Pending}, followUp={FollowUp}). Tx={Tx}",
+                cb.IsPending, cb.IsFollowUpTransaction, cb.ExternalEventId);
+            return WebhookResult.Ignored;
+        }
+
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+
+        // ── 3) تسجيل الحدث جوه نفس الـ transaction ──
         var marker = new ProcessedWebhook
         {
             Id = Guid.NewGuid(),
@@ -72,42 +73,44 @@ public class PaymentWebhookService : IPaymentWebhookService
             ExternalEventId = cb.ExternalEventId,
             ReceivedAt = DateTime.UtcNow
         };
-
         _db.ProcessedWebhooks.Add(marker);
+
         try
         {
             await _db.SaveChangesAsync(ct);
         }
         catch (DbUpdateException)
         {
-            _logger.LogInformation(
-                "Duplicate Paymob webhook ignored. TransactionId={TransactionId}", cb.ExternalEventId);
-            return;
+            await tx.RollbackAsync(ct);
+
+            // الـ UNIQUE index هو الحَكَم. نفرّق بين duplicate حقيقي وفشل تقني تاني:
+            var alreadyProcessed = await _db.ProcessedWebhooks.AsNoTracking()
+                .AnyAsync(x => x.Provider == ProviderName && x.ExternalEventId == cb.ExternalEventId, ct);
+
+            if (alreadyProcessed)
+            {
+                _logger.LogInformation("Duplicate Paymob webhook ignored. Tx={Tx}", cb.ExternalEventId);
+                return WebhookResult.Duplicate;
+            }
+
+            throw;   // فشل تقني → 500 → Paymob يعيد
         }
 
-        // من هنا وطالع: إحنا الوحيدين اللي بنعالج الحدث ده، مضمون.
-
-        // ══ STEP 3: نلاقي الأوردر ════════════════════════════════════════
-        if (!Guid.TryParse(cb.MerchantOrderId, out var orderId))
-        {
-            marker.Outcome = "Unparseable merchant order id";
-            await _db.SaveChangesAsync(ct);
-            _logger.LogError("Paymob webhook had no usable merchant order id. Tx={Tx}", cb.ExternalEventId);
-            return;
-        }
-
-        var order = await _db.Orders.FirstOrDefaultAsync(o => o.Id == orderId, ct);
+        // ── 4) نلاقي الأوردر ──
+        var order = await FindOrderAsync(cb, ct);
         if (order is null)
         {
             marker.Outcome = "Order not found";
             await _db.SaveChangesAsync(ct);
-            _logger.LogError("Paymob webhook for unknown order {OrderId}", orderId);
-            return;
+            await tx.CommitAsync(ct);
+            _logger.LogCritical(
+                "Paymob callback for unknown order. Tx={Tx} PaymobOrder={PaymobOrder} Merchant={Merchant} Success={Success}",
+                cb.ExternalEventId, cb.GatewayOrderId, cb.MerchantOrderId, cb.Success);
+            return WebhookResult.Processed;
         }
 
         marker.OrderId = order.Id;
 
-        // نلاقي الـ Payment row المناسبة (أو نعمل واحدة لو الـ webhook سبق الـ intent)
         var payment = await _db.Payments
             .Where(p => p.OrderId == order.Id && p.PaymobOrderId == cb.GatewayOrderId)
             .OrderByDescending(p => p.CreatedAt)
@@ -130,109 +133,108 @@ public class PaymentWebhookService : IPaymentWebhookService
         payment.AmountPaid = cb.AmountPaid;
         payment.CompletedAt = DateTime.UtcNow;
 
-        // ══ STEP 4: الدفع فشل ════════════════════════════════════════════
+        // ── 5) الدفع فشل: الأوردر يفضل PendingPayment والعميل يعيد المحاولة ──
         if (!cb.Success)
         {
             payment.Status = PaymentStatus.Failed;
             payment.FailureReason = cb.FailureReason;
             marker.Outcome = "Payment failed";
             await _db.SaveChangesAsync(ct);
-            // الأوردر بيفضل PendingPayment — العميل يقدر يحاول تاني. مفيش تغيير حالة.
-            return;
+            await tx.CommitAsync(ct);
+            return WebhookResult.Processed;
         }
 
-        // ══ STEP 5: الأوردر ممكن يكون اتعالج خلاص (نفس الحدث بمعرّف مختلف) ══
-        if (order.Status != OrderStatus.PendingPayment)
+        // ── 6) النجاح: مطابقة المبلغ والعملة ──
+        var amountOk =
+            Math.Abs(cb.AmountPaid - order.Total) <= 0.01m &&
+            string.Equals(cb.Currency, ExpectedCurrency, StringComparison.OrdinalIgnoreCase);
+
+        var target = amountOk ? OrderStatus.Paid : OrderStatus.PaymentMismatch;
+        DateTime? paidAt = amountOk ? DateTime.UtcNow : null;
+
+        // ★ compare-and-set: بيغيّر الحالة بس لو لسه PendingPayment.
+        //   بيحمينا من: إلغاء العميل في نفس اللحظة، ومن callbackين لنفس الأوردر.
+        var affected = await _db.Orders
+            .Where(o => o.Id == order.Id && o.Status == OrderStatus.PendingPayment)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(o => o.Status, target)
+                .SetProperty(o => o.PaidAt, paidAt), ct);
+
+        payment.Status = PaymentStatus.Succeeded;   // الفلوس اتسحبت فعلًا في الحالتين
+
+        if (affected == 0)
         {
-            payment.Status = PaymentStatus.Succeeded;
-            marker.Outcome = $"Order already in {order.Status}";
-            await _db.SaveChangesAsync(ct);
-            _logger.LogWarning(
-                "Paymob success webhook for order {OrderId} already in status {Status}", order.Id, order.Status);
-            return;
-        }
-
-        // ══ STEP 6: مطابقة المبلغ ════════════════════════════════════════
-        // ده مش paranoia. لو حد عدّل المبلغ في الـ iframe، أو لو بق عندنا في
-        // حساب الـ total، المفروض مانأكدش الأوردر تلقائيًا أبدًا.
-        // بنسمح بفرق 1 قرش عشان تقريب القروش↔الجنيه.
-        var difference = Math.Abs(cb.AmountPaid - order.Total);
-
-        if (difference > 0.01m)
-        {
-            payment.Status = PaymentStatus.Succeeded;   // الفلوس اتدفعت فعلًا
-            order.Status = OrderStatus.PaymentMismatch;
-
-            _db.OrderStatusHistories.Add(new OrderStatusHistory
-            {
-                Id = Guid.NewGuid(),
-                OrderId = order.Id,
-                Status = OrderStatus.PaymentMismatch,
-                ChangedAt = DateTime.UtcNow,
-                Note = $"Expected {order.Total:0.00} but received {cb.AmountPaid:0.00} {cb.Currency}"
-            });
-
-            marker.Outcome = "Amount mismatch";
-            await _db.SaveChangesAsync(ct);
-
-            _logger.LogError(
-                "PAYMENT MISMATCH on order {OrderNumber}: expected {Expected}, got {Actual}",
-                order.OrderNumber, order.Total, cb.AmountPaid);
-            return;
-        }
-
-        // ══ STEP 7: النجاح — كل حاجة في transaction واحدة ════════════════
-        await using var tx = await _db.Database.BeginTransactionAsync(ct);
-        try
-        {
-            payment.Status = PaymentStatus.Succeeded;
-            order.Status = OrderStatus.Paid;
-            order.PaidAt = DateTime.UtcNow;
-
-            _db.OrderStatusHistories.Add(new OrderStatusHistory
-            {
-                Id = Guid.NewGuid(),
-                OrderId = order.Id,
-                Status = OrderStatus.Paid,
-                ChangedAt = DateTime.UtcNow,
-                Note = $"Paymob transaction {cb.ExternalEventId}"
-            });
-
-            // ★ استهلاك الكوبون بيحصل هنا، مش وقت الـ Checkout.
-            //   ليه؟ لأن أوردر اتعمل ومتدفعش (abandoned) مالوش الحق يستهلك
-            //   من حصة الكوبون. الاستهلاك مرتبط بالدفع، مش بالنية.
-            //   والـ UNIQUE INDEX على CouponUsage.OrderId بيضمن إن نفس الأوردر
-            //   مستحيل يسجّل استخدامين حتى لو الكود ده اتنفذ مرتين بأي طريقة.
-            if (order.CouponId is { } couponId && order.DiscountAmount > 0)
-            {
-                _db.CouponUsages.Add(new CouponUsage
-                {
-                    Id = Guid.NewGuid(),
-                    CouponId = couponId,
-                    CustomerId = order.CustomerId,
-                    OrderId = order.Id,
-                    UsedAt = DateTime.UtcNow
-                });
-            }
-
-            marker.Outcome = "Paid";
+            // فلوس اتسحبت على أوردر مش PendingPayment (اتلغى، أو اتدفع قبل كده بمحاولة تانية).
+            // مفيش تغيير حالة، بس لازم حد يرجّع الفلوس.
+            marker.Outcome = "Payment received for an order that is no longer PendingPayment — REFUND REQUIRED";
             await _db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
-        }
-        catch (Exception ex)
-        {
-            await tx.RollbackAsync(ct);
-            _logger.LogError(ex, "Failed to finalize payment for order {OrderId}", order.Id);
-            return;   // الـ marker اتكتب في transaction منفصلة قبل كده — مقصود:
-                      // أحسن نفقد webhook مرة واحدة من إننا نعالجه مرتين.
+            _logger.LogCritical(
+                "Money received for non-pending order {OrderNumber}. Tx={Tx} Amount={Amount}. Manual refund required.",
+                order.OrderNumber, cb.ExternalEventId, cb.AmountPaid);
+            return WebhookResult.Processed;
         }
 
-        // ══ STEP 8: الإشعار — بره الـ transaction، بعد الـ commit ═════════
-        // لو حطيته جوه الـ transaction وفشل، هيرجّع أوردر مدفوع لحالته الأولى.
-        await SendPaymentConfirmedAsync(order, ct);
+        _db.OrderStatusHistories.Add(new OrderStatusHistory
+        {
+            Id = Guid.NewGuid(),
+            OrderId = order.Id,
+            Status = target,
+            ChangedAt = DateTime.UtcNow,
+            Note = amountOk
+                ? $"Paymob transaction {cb.ExternalEventId}"
+                : $"Expected {order.Total:0.00} {ExpectedCurrency} but received {cb.AmountPaid:0.00} {cb.Currency}"
+        });
+
+        // استهلاك الكوبون مرتبط بالدفع مش بالـ checkout. UNIQUE على CouponUsage.OrderId.
+        if (amountOk && order.CouponId is { } couponId && order.DiscountAmount > 0)
+        {
+            _db.CouponUsages.Add(new CouponUsage
+            {
+                Id = Guid.NewGuid(),
+                CouponId = couponId,
+                CustomerId = order.CustomerId,
+                OrderId = order.Id,
+                UsedAt = DateTime.UtcNow
+            });
+        }
+
+        marker.Outcome = amountOk ? "Paid" : "Amount mismatch";
+        await _db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+
+        if (!amountOk)
+        {
+            _logger.LogError(
+                "PAYMENT MISMATCH on order {OrderNumber}: expected {Expected}, got {Actual} {Currency}",
+                order.OrderNumber, order.Total, cb.AmountPaid, cb.Currency);
+            return WebhookResult.Processed;
+        }
+
+        // ── 7) الإشعار بعد الـ commit، وفشله ممنوع يأثر على أي حاجة ──
+        await TryNotifyPaidAsync(order, ct);
+        return WebhookResult.Processed;
     }
 
-    private async Task SendPaymentConfirmedAsync(Order order, CancellationToken ct)
+    /// <summary>أولًا special_reference (= Order.Id). لو مش موجود نرجع لـ Paymob order id المخزّن عندنا.</summary>
+    private async Task<Order?> FindOrderAsync(GatewayCallback cb, CancellationToken ct)
+    {
+        if (Guid.TryParse(cb.MerchantOrderId, out var orderId))
+        {
+            var byRef = await _db.Orders.AsNoTracking().FirstOrDefaultAsync(o => o.Id == orderId, ct);
+            if (byRef is not null) return byRef;
+        }
+
+        if (!string.IsNullOrEmpty(cb.GatewayOrderId))
+        {
+            return await _db.Orders.AsNoTracking()
+                .FirstOrDefaultAsync(o => o.Payments.Any(p => p.PaymobOrderId == cb.GatewayOrderId), ct);
+        }
+
+        return null;
+    }
+
+    private async Task TryNotifyPaidAsync(Order order, CancellationToken ct)
     {
         try
         {
@@ -250,7 +252,6 @@ public class PaymentWebhookService : IPaymentWebhookService
         }
         catch (Exception ex)
         {
-            // فشل إشعار ممنوع يأثر على حاجة — NFR.
             _logger.LogWarning(ex, "Could not enqueue payment notification for order {OrderId}", order.Id);
         }
     }

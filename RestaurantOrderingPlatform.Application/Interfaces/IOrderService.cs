@@ -1,5 +1,5 @@
 ﻿using RestaurantOrderingPlatform.Application.DTOs;
-using RestaurantOrderingPlatform.Application.DTOs.Order;
+using RestaurantOrderingPlatform.Application.DTOs.Orders;
 using RestaurantOrderingPlatform.Domain.Enums;
 
 namespace RestaurantOrderingPlatform.Application.Interfaces;

@@ -1,9 +1,7 @@
 // Application/Services/OrderService.cs
 using Microsoft.EntityFrameworkCore;
-using RestaurantOrderingPlatform.Application.Common;
-using RestaurantOrderingPlatform.Application.Common.Interfaces;
 using RestaurantOrderingPlatform.Application.DTOs;
-using RestaurantOrderingPlatform.Application.DTOs.Order;
+using RestaurantOrderingPlatform.Application.DTOs.Orders;
 using RestaurantOrderingPlatform.Application.Exceptions;
 using RestaurantOrderingPlatform.Application.Interfaces;
 using RestaurantOrderingPlatform.Domain.Entities;
@@ -102,9 +100,9 @@ public class OrderService : IOrderService
             {
                 Id = Guid.NewGuid(),
                 MenuItemId = mi.Id,
-                ItemNameSnapshot  = mi.Name,
+                ItemNameSnapshot = mi.Name,
                 ItemPriceSnapshot = mi.Price,
-                Quantity  = ci.Quantity,
+                Quantity = ci.Quantity,
                 LineTotal = decimal.Round(mi.Price * ci.Quantity, 2)
             };
         }).ToList();
@@ -146,8 +144,8 @@ public class OrderService : IOrderService
 
             // ★ Address snapshot — بنفس منطق OrderItem snapshot
             AddressLabelSnapshot = address.Label,
-            AddressLineSnapshot  = BuildAddressLine(address),
-            AddressCitySnapshot  = address.City,
+            AddressLineSnapshot = BuildAddressLine(address),
+            AddressCitySnapshot = address.City,
             AddressLandmarkSnapshot = address.Landmark,
 
             Items = orderItems
@@ -205,6 +203,10 @@ public class OrderService : IOrderService
         var contact = await _identity.GetContactAsync(customer.UserId, ct)
             ?? throw new NotFoundException("User account not found.");
 
+        // Paymob بيرفض الـ intention من غير تليفون (400)، فنرد 409 واضح قبل ما ننده الـ gateway
+        if (string.IsNullOrWhiteSpace(contact.PhoneNumber))
+            throw new ConflictException("Please add a phone number to your profile before paying.");
+
         var result = await _gateway.CreateIntentAsync(new PaymentIntentRequest(
             order.Id, order.OrderNumber, order.Total,
             contact.FullName, contact.Email, contact.PhoneNumber,
@@ -224,8 +226,8 @@ public class OrderService : IOrderService
         await _db.SaveChangesAsync(ct);
 
         return new PaymentIntentResponse(
-            payment.Id, order.Id, result.PaymentToken, result.CheckoutUrl,
-            order.Total, DateTime.UtcNow.AddMinutes(60));
+            payment.Id, order.Id, result.CheckoutUrl,
+            order.Total, result.ExpiresAt);
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -266,9 +268,8 @@ public class OrderService : IOrderService
     {
         var customer = await GetCurrentCustomerAsync(ct);
 
-        // ★ Atomic conditional UPDATE — نفس النمط بتاع الـ driver accept في Module 7.
-        //   لو الـ webhook وصل في نفس اللحظة وحوّل الأوردر لـ Paid، الشرط هيفشل
-        //   والـ affected rows هترجع 0 → مفيش إلغاء لأوردر مدفوع، من غير أي lock.
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+
         var affected = await _db.Orders
             .Where(o => o.Id == orderId
                      && o.CustomerId == customer.Id
@@ -276,7 +277,10 @@ public class OrderService : IOrderService
             .ExecuteUpdateAsync(s => s.SetProperty(o => o.Status, OrderStatus.Cancelled), ct);
 
         if (affected == 0)
+        {
+            await tx.RollbackAsync(ct);
             throw new ConflictException("Order cannot be cancelled at this stage.");
+        }
 
         _db.OrderStatusHistories.Add(new OrderStatusHistory
         {
@@ -287,7 +291,9 @@ public class OrderService : IOrderService
             ChangedByUserId = _currentUser.UserId,
             Note = "Cancelled by customer"
         });
+
         await _db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -315,7 +321,11 @@ public class OrderService : IOrderService
             .Skip((page - 1) * pageSize).Take(pageSize)
             .Select(o => new
             {
-                o.Id, o.OrderNumber, o.Status, o.Total, o.CreatedAt,
+                o.Id,
+                o.OrderNumber,
+                o.Status,
+                o.Total,
+                o.CreatedAt,
                 ItemsCount = o.Items.Count,
                 CustomerUserId = o.Customer.UserId
             })
@@ -588,13 +598,13 @@ public class OrderService : IOrderService
 
     private static OrderNotificationType? MapNotification(OrderStatus s) => s switch
     {
-        OrderStatus.Paid      => OrderNotificationType.PaymentConfirmed,
-        OrderStatus.Accepted  => OrderNotificationType.OrderAccepted,
-        OrderStatus.Rejected  => OrderNotificationType.OrderRejected,
+        OrderStatus.Paid => OrderNotificationType.PaymentConfirmed,
+        OrderStatus.Accepted => OrderNotificationType.OrderAccepted,
+        OrderStatus.Rejected => OrderNotificationType.OrderRejected,
         OrderStatus.Preparing => OrderNotificationType.Preparing,
-        OrderStatus.Ready     => OrderNotificationType.Ready,
-        OrderStatus.PickedUp  => OrderNotificationType.PickedUp,
-        OrderStatus.OnTheWay  => OrderNotificationType.OnTheWay,
+        OrderStatus.Ready => OrderNotificationType.Ready,
+        OrderStatus.PickedUp => OrderNotificationType.PickedUp,
+        OrderStatus.OnTheWay => OrderNotificationType.OnTheWay,
         OrderStatus.Delivered => OrderNotificationType.Delivered,
         _ => null
     };
@@ -602,8 +612,8 @@ public class OrderService : IOrderService
     private static string BuildAddressLine(Address a)
     {
         var parts = new List<string> { a.Street };
-        if (!string.IsNullOrWhiteSpace(a.Building))  parts.Add($"Building {a.Building}");
-        if (!string.IsNullOrWhiteSpace(a.Floor))     parts.Add($"Floor {a.Floor}");
+        if (!string.IsNullOrWhiteSpace(a.Building)) parts.Add($"Building {a.Building}");
+        if (!string.IsNullOrWhiteSpace(a.Floor)) parts.Add($"Floor {a.Floor}");
         if (!string.IsNullOrWhiteSpace(a.Apartment)) parts.Add($"Apt {a.Apartment}");
         return string.Join(", ", parts);
     }

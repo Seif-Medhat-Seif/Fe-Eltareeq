@@ -1,7 +1,7 @@
-﻿using System.Text;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using RestaurantOrderingPlatform.Application;
 using RestaurantOrderingPlatform.Application.Interfaces;
@@ -11,7 +11,12 @@ using RestaurantOrderingPlatform.Infrastructure;
 using RestaurantOrderingPlatform.Infrastructure.Email;
 using RestaurantOrderingPlatform.Infrastructure.GoogleAuth;
 using RestaurantOrderingPlatform.Infrastructure.Identity;
+using RestaurantOrderingPlatform.Infrastructure.Integrations.Paymob;
+using RestaurantOrderingPlatform.Infrastructure.Integrations.WhatsApp;
+using RestaurantOrderingPlatform.Infrastructure.Notifications;
+using RestaurantOrderingPlatform.Infrastructure.Paymob;
 using Serilog;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -47,6 +52,21 @@ builder.Services.AddScoped<IRestaurantService, RestaurantService>();
 builder.Services.AddScoped<IMenuService, MenuService>();
 builder.Services.AddScoped<ICustomerService, CustomerService>();
 builder.Services.AddScoped<ICartService, CartService>();
+builder.Services.AddScoped<IOrderService, OrderService>();
+builder.Services.AddScoped<IPaymentWebhookService, PaymentWebhookService>();
+
+// Paymob
+builder.Services.Configure<PaymobSettings>(builder.Configuration.GetSection("Paymob"));
+builder.Services.AddHttpClient<IPaymentGateway, PaymobGateway>();
+
+// WhatsApp
+builder.Services.Configure<WhatsAppSettings>(builder.Configuration.GetSection("WhatsApp"));
+builder.Services.AddHttpClient<IWhatsAppSender, WhatsAppSender>();
+
+// Notification queue — Singleton لأنه بيتشارك بين الـ requests والـ worker
+builder.Services.AddSingleton<NotificationQueue>();
+builder.Services.AddSingleton<INotificationService>(sp => sp.GetRequiredService<NotificationQueue>());
+builder.Services.AddHostedService<NotificationBackgroundWorker>();
 
 builder.Services.Configure<AuthSettings>(builder.Configuration.GetSection("AuthSettings"));
 
