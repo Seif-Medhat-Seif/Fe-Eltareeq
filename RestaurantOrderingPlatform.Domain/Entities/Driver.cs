@@ -13,6 +13,11 @@ public class Driver
     public string VehicleImageUrl { get; set; } = string.Empty;
     public string? VehiclePlateNumber { get; set; }
 
+    public DriverVerificationStatus VerificationStatus { get; set; } = DriverVerificationStatus.NotSubmitted;
+    public DateTime? VerificationSubmittedAt { get; set; }
+    public DateTime? VerificationReviewedAt { get; set; }
+    public string? VerificationRejectionReason { get; set; }
+
     // Navigation
     public ICollection<Order> Deliveries { get; set; } = new List<Order>();
 }

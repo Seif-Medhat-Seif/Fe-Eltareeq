@@ -90,6 +90,13 @@ namespace RestaurantOrderingPlatform.Infrastructure.Data.Configurations
                    .HasForeignKey(x => x.AddressId)
                    .IsRequired(false)
                    .OnDelete(DeleteBehavior.SetNull);
+
+            // الضمان الحقيقي لـ BR-6: كل DriverId يظهر مرة واحدة بس بين الأوردرات النشطة.
+            // ⚠️ أسماء الـ enum كنصوص هنا. لو غيّرت اسم قيمة في OrderStatus الفلتر بيبوّظ بصمت (اختبار في Phase 8).
+            builder.HasIndex(x => x.DriverId)
+                   .IsUnique()
+                   .HasFilter("[DriverId] IS NOT NULL AND [Status] IN ('DriverAssigned','PickedUp','OnTheWay')")
+                   .HasDatabaseName("UX_Orders_DriverId_ActiveDelivery");
         }
     }
 }

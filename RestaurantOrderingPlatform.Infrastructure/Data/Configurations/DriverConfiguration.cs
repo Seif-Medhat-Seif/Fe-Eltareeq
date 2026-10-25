@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using RestaurantOrderingPlatform.Domain.Entities;
+using RestaurantOrderingPlatform.Domain.Enums;
 using RestaurantOrderingPlatform.Infrastructure.Identity;
 
 namespace RestaurantOrderingPlatform.Infrastructure.Data.Configurations
@@ -16,12 +17,25 @@ namespace RestaurantOrderingPlatform.Infrastructure.Data.Configurations
                    .HasForeignKey(d => d.UserId)
                    .OnDelete(DeleteBehavior.Restrict);
 
-            builder.Property(d => d.NationalID).IsRequired().HasMaxLength(30);
-
             builder.Property(d => d.VehicleType)
                    .HasConversion<string>()
                    .HasMaxLength(20)
                    .IsRequired();
+
+            builder.Property(x => x.VerificationStatus)
+                   .HasConversion<string>()
+                   .HasMaxLength(20)
+                   .HasDefaultValue(DriverVerificationStatus.NotSubmitted);
+            // مهم: من غيره السواقين الموجودين ياخدوا '' وتقرا بـ exception
+
+            builder.Property(x => x.VerificationRejectionReason).HasMaxLength(500);
+            builder.HasIndex(x => x.VerificationStatus);
+
+            // نفس الرقم القومي مايتسجلش على حسابين سواق (بين اللي بعتوا بياناتهم بس؛ الـ placeholder مستثنى)
+            builder.HasIndex(x => x.NationalID)
+                   .IsUnique()
+                   .HasFilter("[VerificationStatus] <> 'NotSubmitted'")
+                   .HasDatabaseName("UX_Drivers_NationalID");
 
             builder.Property(d => d.VehicleImageUrl).IsRequired().HasMaxLength(500);
             builder.Property(d => d.VehiclePlateNumber).HasMaxLength(20);

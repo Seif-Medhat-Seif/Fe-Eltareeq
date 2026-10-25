@@ -54,6 +54,8 @@ builder.Services.AddScoped<ICustomerService, CustomerService>();
 builder.Services.AddScoped<ICartService, CartService>();
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<IPaymentWebhookService, PaymentWebhookService>();
+builder.Services.AddScoped<IDriverService, DriverService>();
+builder.Services.AddScoped<IDriverAdminService, DriverAdminService>();
 
 // Paymob
 builder.Services.Configure<PaymobSettings>(builder.Configuration.GetSection("Paymob"));
@@ -69,6 +71,10 @@ builder.Services.AddSingleton<INotificationService>(sp => sp.GetRequiredService<
 builder.Services.AddHostedService<NotificationBackgroundWorker>();
 
 builder.Services.Configure<AuthSettings>(builder.Configuration.GetSection("AuthSettings"));
+
+// Infrastructure DI:
+builder.Services.Configure<AdminSeedSettings>(builder.Configuration.GetSection("AdminSeed"));
+builder.Services.AddScoped<IdentitySeeder>();
 
 // ---------- ASP.NET Core Identity ----------
 builder.Services
@@ -128,5 +134,12 @@ app.UseAuthentication(); // must come before UseAuthorization
 app.UseAuthorization();
 
 app.MapControllers();
+
+
+// Program.cs بعد var app = builder.Build(); وقبل app.Run():
+using (var scope = app.Services.CreateScope())
+{
+    await scope.ServiceProvider.GetRequiredService<IdentitySeeder>().SeedAsync();
+}
 
 app.Run();
