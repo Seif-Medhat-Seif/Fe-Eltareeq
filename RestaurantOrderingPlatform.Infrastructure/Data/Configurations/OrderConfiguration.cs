@@ -83,6 +83,7 @@ namespace RestaurantOrderingPlatform.Infrastructure.Data.Configurations
             builder.HasIndex(x => new { x.RestaurantId, x.Status });
             builder.HasIndex(x => new { x.CustomerId, x.CreatedAt });
             builder.HasIndex(x => new { x.Status, x.DriverId });   // Module 7 (available deliveries)
+            builder.HasIndex(o => new { o.RestaurantId, o.CreatedAt });
 
             // AddressId بقى nullable + Restrict (الـ snapshot هو مصدر الحقيقة)
             builder.HasOne<Address>()

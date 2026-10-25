@@ -58,6 +58,7 @@ builder.Services.AddScoped<IDriverAdminService, DriverAdminService>();
 builder.Services.AddScoped<ICouponService, CouponService>();
 builder.Services.AddScoped<IReviewService, ReviewService>();
 builder.Services.AddScoped<IReviewAdminService, ReviewAdminService>();
+builder.Services.AddScoped<IReportService, ReportService>();
 
 // Paymob
 builder.Services.Configure<PaymobSettings>(builder.Configuration.GetSection("Paymob"));

@@ -21,6 +21,7 @@ namespace RestaurantOrderingPlatform.Infrastructure.Data.Configurations
 
             builder.Property(oi => oi.Quantity).IsRequired();
             builder.Property(oi => oi.LineTotal).IsRequired();
+            builder.HasIndex(i => i.OrderId);
         }
     }
 }
