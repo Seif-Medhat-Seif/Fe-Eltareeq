@@ -56,6 +56,8 @@ builder.Services.AddScoped<IPaymentWebhookService, PaymentWebhookService>();
 builder.Services.AddScoped<IDriverService, DriverService>();
 builder.Services.AddScoped<IDriverAdminService, DriverAdminService>();
 builder.Services.AddScoped<ICouponService, CouponService>();
+builder.Services.AddScoped<IReviewService, ReviewService>();
+builder.Services.AddScoped<IReviewAdminService, ReviewAdminService>();
 
 // Paymob
 builder.Services.Configure<PaymobSettings>(builder.Configuration.GetSection("Paymob"));

@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using RestaurantOrderingPlatform.Domain.Entities;
 
@@ -28,8 +28,9 @@ namespace RestaurantOrderingPlatform.Infrastructure.Data.Configurations
 
             builder.Property(r => r.CreatedAt).IsRequired();
 
-            builder.HasIndex(r => new { r.RestaurantId, r.ModerationStatus });
-
+            builder.HasIndex(r => r.OrderId).IsUnique();                       // موجود
+            builder.HasIndex(r => new { r.RestaurantId, r.ModerationStatus, r.CreatedAt }); // للـ list العام
+            builder.ToTable(t => t.HasCheckConstraint("CK_Review_Rating", "[Rating] BETWEEN 1 AND 5"));
             // Composition: a ReviewReport has no meaning without its Review.
             builder.HasMany(r => r.Reports)
                    .WithOne(rr => rr.Review)

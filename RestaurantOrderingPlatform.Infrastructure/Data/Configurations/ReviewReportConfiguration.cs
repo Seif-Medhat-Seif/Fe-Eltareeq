@@ -23,6 +23,14 @@ namespace RestaurantOrderingPlatform.Infrastructure.Data.Configurations
                    .HasMaxLength(20)
                    .IsRequired();
 
+            builder.HasIndex(x => new { x.ReviewId, x.RestaurantOwnerId })
+                   .HasFilter("[Status] = 'Open'").IsUnique();   // بلاغ مفتوح واحد لكل owner لكل مراجعة
+            
+            builder.HasOne<Review>()
+                   .WithMany()
+                   .HasForeignKey(x => x.ReviewId)
+                   .OnDelete(DeleteBehavior.Restrict);
+
             builder.Property(rr => rr.CreatedAt).IsRequired();
         }
     }
