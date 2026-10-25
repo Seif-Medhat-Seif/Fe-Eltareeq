@@ -1,7 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using RestaurantOrderingPlatform.Application;
 using RestaurantOrderingPlatform.Application.Interfaces;
@@ -56,6 +55,7 @@ builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<IPaymentWebhookService, PaymentWebhookService>();
 builder.Services.AddScoped<IDriverService, DriverService>();
 builder.Services.AddScoped<IDriverAdminService, DriverAdminService>();
+builder.Services.AddScoped<ICouponService, CouponService>();
 
 // Paymob
 builder.Services.Configure<PaymobSettings>(builder.Configuration.GetSection("Paymob"));
