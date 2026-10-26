@@ -12,8 +12,8 @@ public class Order
     public Guid RestaurantId { get; set; }
     public Restaurant Restaurant { get; set; } = null!;
 
-    public Guid AddressId { get; set; }
-    public Address Address { get; set; } = null!;
+    public Guid? AddressId { get; set; }
+    public Address? Address { get; set; }
 
     // Nullable — unassigned until a driver accepts (Module 7's atomic accept
     // writes DriverId here under a WHERE DriverId IS NULL guard).

@@ -10,8 +10,14 @@ namespace RestaurantOrderingPlatform.Infrastructure.Data.Configurations
         {
             // Relationship to Order configured from the Order side
             // (composition — see OrderConfiguration.HasMany).
-            // Relationship to MenuItem configured from the MenuItem side
-            // (see MenuItemConfiguration.HasMany).
+
+            // Restrict: a MenuItem can never be hard-deleted while order history references it.
+            // Must use WithMany(m => m.OrderItems) — a bare WithMany() creates a second
+            // relationship and the shadow property MenuItemId1.
+            builder.HasOne(oi => oi.MenuItem)
+                   .WithMany(m => m.OrderItems)
+                   .HasForeignKey(oi => oi.MenuItemId)
+                   .OnDelete(DeleteBehavior.Restrict);
 
             // Snapshot fields — the source of truth for display. Menu
             // price/name edits after this point must NEVER retroactively

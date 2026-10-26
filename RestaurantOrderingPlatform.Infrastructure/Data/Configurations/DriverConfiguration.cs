@@ -37,6 +37,8 @@ namespace RestaurantOrderingPlatform.Infrastructure.Data.Configurations
                    .HasFilter("[VerificationStatus] <> 'NotSubmitted'")
                    .HasDatabaseName("UX_Drivers_NationalID");
 
+            builder.Property(d => d.NationalID).IsRequired().HasMaxLength(30);
+
             builder.Property(d => d.VehicleImageUrl).IsRequired().HasMaxLength(500);
             builder.Property(d => d.VehiclePlateNumber).HasMaxLength(20);
 

@@ -25,11 +25,8 @@ namespace RestaurantOrderingPlatform.Infrastructure.Data.Configurations
 
             builder.HasIndex(x => new { x.ReviewId, x.RestaurantOwnerId })
                    .HasFilter("[Status] = 'Open'").IsUnique();   // بلاغ مفتوح واحد لكل owner لكل مراجعة
-            
-            builder.HasOne<Review>()
-                   .WithMany()
-                   .HasForeignKey(x => x.ReviewId)
-                   .OnDelete(DeleteBehavior.Restrict);
+
+            builder.HasIndex(x => x.ReviewId);   // الـ filtered index بيغطي Open بس
 
             builder.Property(rr => rr.CreatedAt).IsRequired();
         }

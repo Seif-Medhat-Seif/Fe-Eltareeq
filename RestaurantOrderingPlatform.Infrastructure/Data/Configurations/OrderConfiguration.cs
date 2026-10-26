@@ -11,10 +11,13 @@ namespace RestaurantOrderingPlatform.Infrastructure.Data.Configurations
             // Customer, Restaurant relationships configured from their
             // respective sides (HasMany on Customer/Restaurant).
 
+            // Address is nullable: the Order keeps its own address snapshot, so deleting
+            // an Address must never block or delete orders (SetNull).
             builder.HasOne(o => o.Address)
                    .WithMany()   // Address doesn't expose an Orders collection
                    .HasForeignKey(o => o.AddressId)
-                   .OnDelete(DeleteBehavior.Restrict);
+                   .IsRequired(false)
+                   .OnDelete(DeleteBehavior.SetNull);
 
             // Driver relationship configured from the Driver side
             // (DriverConfiguration.HasMany(d => d.Deliveries)).
@@ -37,7 +40,6 @@ namespace RestaurantOrderingPlatform.Infrastructure.Data.Configurations
             builder.Property(o => o.CreatedAt).IsRequired();
 
             builder.HasIndex(o => o.CustomerId);
-            builder.HasIndex(o => new { o.RestaurantId, o.Status });
 
             // Composition: OrderItem/OrderStatusHistory/Payment have no
             // independent lifecycle outside their Order.
@@ -85,12 +87,6 @@ namespace RestaurantOrderingPlatform.Infrastructure.Data.Configurations
             builder.HasIndex(x => new { x.Status, x.DriverId });   // Module 7 (available deliveries)
             builder.HasIndex(o => new { o.RestaurantId, o.CreatedAt });
 
-            // AddressId بقى nullable + Restrict (الـ snapshot هو مصدر الحقيقة)
-            builder.HasOne<Address>()
-                   .WithMany()
-                   .HasForeignKey(x => x.AddressId)
-                   .IsRequired(false)
-                   .OnDelete(DeleteBehavior.SetNull);
 
             // الضمان الحقيقي لـ BR-6: كل DriverId يظهر مرة واحدة بس بين الأوردرات النشطة.
             // ⚠️ أسماء الـ enum كنصوص هنا. لو غيّرت اسم قيمة في OrderStatus الفلتر بيبوّظ بصمت (اختبار في Phase 8).

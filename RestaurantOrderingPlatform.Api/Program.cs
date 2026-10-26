@@ -53,12 +53,14 @@ builder.Services.AddScoped<ICustomerService, CustomerService>();
 builder.Services.AddScoped<ICartService, CartService>();
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<IPaymentWebhookService, PaymentWebhookService>();
+builder.Services.AddScoped<IPaymentGateway, PaymobGateway>();
 builder.Services.AddScoped<IDriverService, DriverService>();
 builder.Services.AddScoped<IDriverAdminService, DriverAdminService>();
 builder.Services.AddScoped<ICouponService, CouponService>();
 builder.Services.AddScoped<IReviewService, ReviewService>();
 builder.Services.AddScoped<IReviewAdminService, ReviewAdminService>();
 builder.Services.AddScoped<IReportService, ReportService>();
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 
 // Paymob
 builder.Services.Configure<PaymobSettings>(builder.Configuration.GetSection("Paymob"));
@@ -75,6 +77,7 @@ builder.Services.AddHostedService<NotificationBackgroundWorker>();
 
 builder.Services.Configure<AuthSettings>(builder.Configuration.GetSection("AuthSettings"));
 
+builder.Services.AddHttpContextAccessor();
 // Infrastructure DI:
 builder.Services.Configure<AdminSeedSettings>(builder.Configuration.GetSection("AdminSeed"));
 builder.Services.AddScoped<IdentitySeeder>();
@@ -136,13 +139,12 @@ app.UseHttpsRedirection();
 app.UseAuthentication(); // must come before UseAuthorization
 app.UseAuthorization();
 
-app.MapControllers();
-
-
 // Program.cs بعد var app = builder.Build(); وقبل app.Run():
 using (var scope = app.Services.CreateScope())
 {
     await scope.ServiceProvider.GetRequiredService<IdentitySeeder>().SeedAsync();
 }
+
+app.MapControllers();
 
 app.Run();

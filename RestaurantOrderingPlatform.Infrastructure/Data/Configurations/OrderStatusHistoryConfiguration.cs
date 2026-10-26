@@ -17,12 +17,14 @@ namespace RestaurantOrderingPlatform.Infrastructure.Data.Configurations
                    .IsRequired();
 
             builder.Property(h => h.ChangedAt).IsRequired();
+            builder.Property(h => h.Note).HasMaxLength(500);
 
-            builder.HasIndex(h => h.OrderId);
+            // Order timeline: GET order → history ordered by time
+            builder.HasIndex(h => new { h.OrderId, h.ChangedAt });
 
-            builder.Property(x => x.Note).HasMaxLength(500);
-            builder.Property(x => x.Status).HasConversion<string>().HasMaxLength(30);
-            builder.HasIndex(x => new { x.OrderId, x.ChangedAt }).IncludeProperties(h => h.OrderId);
+            // Reports: WHERE Status = 'Delivered' AND ChangedAt in range → needs OrderId
+            builder.HasIndex(h => new { h.Status, h.ChangedAt })
+                   .IncludeProperties(h => h.OrderId);
         }
     }
 }

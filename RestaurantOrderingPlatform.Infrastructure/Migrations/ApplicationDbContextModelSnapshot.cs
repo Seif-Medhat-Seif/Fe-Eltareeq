@@ -160,8 +160,8 @@ namespace RestaurantOrderingPlatform.Infrastructure.Migrations
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("Apartment")
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
 
                     b.Property<string>("Building")
                         .HasMaxLength(50)
@@ -172,12 +172,17 @@ namespace RestaurantOrderingPlatform.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("SYSUTCDATETIME()");
+
                     b.Property<Guid>("CustomerId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("Floor")
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
 
                     b.Property<bool>("IsDefault")
                         .HasColumnType("bit");
@@ -198,9 +203,11 @@ namespace RestaurantOrderingPlatform.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CustomerId");
+                    b.HasIndex("CustomerId")
+                        .IsUnique()
+                        .HasFilter("[IsDefault] = 1");
 
-                    b.ToTable("Addresses");
+                    b.ToTable("Addresses", (string)null);
                 });
 
             modelBuilder.Entity("RestaurantOrderingPlatform.Domain.Entities.Cart", b =>
@@ -242,6 +249,10 @@ namespace RestaurantOrderingPlatform.Infrastructure.Migrations
                     b.Property<Guid>("MenuItemId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<decimal>("PriceAtAdd")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<int>("Quantity")
                         .HasColumnType("int");
 
@@ -251,7 +262,7 @@ namespace RestaurantOrderingPlatform.Infrastructure.Migrations
 
                     b.HasIndex("MenuItemId");
 
-                    b.ToTable("CartItems");
+                    b.ToTable("CartItems", (string)null);
                 });
 
             modelBuilder.Entity("RestaurantOrderingPlatform.Domain.Entities.Coupon", b =>
@@ -330,11 +341,12 @@ namespace RestaurantOrderingPlatform.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CouponId");
-
                     b.HasIndex("CustomerId");
 
-                    b.HasIndex("OrderId");
+                    b.HasIndex("OrderId")
+                        .IsUnique();
+
+                    b.HasIndex("CouponId", "CustomerId");
 
                     b.ToTable("CouponUsages");
                 });
@@ -384,10 +396,34 @@ namespace RestaurantOrderingPlatform.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
+                    b.Property<string>("VerificationRejectionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("VerificationReviewedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("VerificationStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasDefaultValue("NotSubmitted");
+
+                    b.Property<DateTime?>("VerificationSubmittedAt")
+                        .HasColumnType("datetime2");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("NationalID")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Drivers_NationalID")
+                        .HasFilter("[VerificationStatus] <> 'NotSubmitted'");
 
                     b.HasIndex("UserId")
                         .IsUnique();
+
+                    b.HasIndex("VerificationStatus");
 
                     b.ToTable("Drivers");
                 });
@@ -414,7 +450,7 @@ namespace RestaurantOrderingPlatform.Infrastructure.Migrations
                     b.HasIndex("RestaurantId", "Name")
                         .IsUnique();
 
-                    b.ToTable("MenuCategories");
+                    b.ToTable("MenuCategories", (string)null);
                 });
 
             modelBuilder.Entity("RestaurantOrderingPlatform.Domain.Entities.MenuItem", b =>
@@ -453,7 +489,7 @@ namespace RestaurantOrderingPlatform.Infrastructure.Migrations
 
                     b.HasIndex("MenuCategoryId");
 
-                    b.ToTable("MenuItems");
+                    b.ToTable("MenuItems", (string)null);
                 });
 
             modelBuilder.Entity("RestaurantOrderingPlatform.Domain.Entities.Order", b =>
@@ -462,8 +498,27 @@ namespace RestaurantOrderingPlatform.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<Guid>("AddressId")
+                    b.Property<string>("AddressCitySnapshot")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<Guid?>("AddressId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("AddressLabelSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("AddressLandmarkSnapshot")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("AddressLineSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
 
                     b.Property<Guid?>("CouponId")
                         .HasColumnType("uniqueidentifier");
@@ -473,6 +528,9 @@ namespace RestaurantOrderingPlatform.Infrastructure.Migrations
 
                     b.Property<Guid>("CustomerId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("DeliveredAt")
+                        .HasColumnType("datetime2");
 
                     b.Property<decimal>("DeliveryFee")
                         .HasPrecision(18, 2)
@@ -485,8 +543,26 @@ namespace RestaurantOrderingPlatform.Infrastructure.Migrations
                     b.Property<Guid?>("DriverId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("OrderNumber")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<DateTime?>("PaidAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("RejectionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
                     b.Property<Guid>("RestaurantId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -509,9 +585,21 @@ namespace RestaurantOrderingPlatform.Infrastructure.Migrations
 
                     b.HasIndex("CustomerId");
 
-                    b.HasIndex("DriverId");
+                    b.HasIndex("DriverId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Orders_DriverId_ActiveDelivery")
+                        .HasFilter("[DriverId] IS NOT NULL AND [Status] IN ('DriverAssigned','PickedUp','OnTheWay')");
+
+                    b.HasIndex("OrderNumber")
+                        .IsUnique();
+
+                    b.HasIndex("CustomerId", "CreatedAt");
+
+                    b.HasIndex("RestaurantId", "CreatedAt");
 
                     b.HasIndex("RestaurantId", "Status");
+
+                    b.HasIndex("Status", "DriverId");
 
                     b.ToTable("Orders");
                 });
@@ -562,6 +650,13 @@ namespace RestaurantOrderingPlatform.Infrastructure.Migrations
                     b.Property<DateTime>("ChangedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<Guid?>("ChangedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
                     b.Property<Guid>("OrderId")
                         .HasColumnType("uniqueidentifier");
 
@@ -572,7 +667,11 @@ namespace RestaurantOrderingPlatform.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("OrderId");
+                    b.HasIndex("OrderId", "ChangedAt");
+
+                    b.HasIndex("Status", "ChangedAt");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("Status", "ChangedAt"), new[] { "OrderId" });
 
                     b.ToTable("OrderStatusHistories");
                 });
@@ -587,11 +686,22 @@ namespace RestaurantOrderingPlatform.Infrastructure.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("FailureReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
                     b.Property<Guid>("OrderId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("PaymobOrderId")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<string>("PaymobTransactionReference")
                         .HasMaxLength(100)
@@ -606,7 +716,48 @@ namespace RestaurantOrderingPlatform.Infrastructure.Migrations
 
                     b.HasIndex("OrderId");
 
+                    b.HasIndex("PaymobTransactionReference")
+                        .IsUnique()
+                        .HasFilter("[PaymobTransactionReference] IS NOT NULL");
+
                     b.ToTable("Payments");
+                });
+
+            modelBuilder.Entity("RestaurantOrderingPlatform.Domain.Entities.ProcessedWebhook", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ExternalEventId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<Guid?>("OrderId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Outcome")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime>("ReceivedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderId");
+
+                    b.HasIndex("Provider", "ExternalEventId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_ProcessedWebhooks_Provider_ExternalEventId");
+
+                    b.ToTable("ProcessedWebhooks");
                 });
 
             modelBuilder.Entity("RestaurantOrderingPlatform.Domain.Entities.RefreshToken", b =>
@@ -805,9 +956,12 @@ namespace RestaurantOrderingPlatform.Infrastructure.Migrations
                     b.HasIndex("OrderId")
                         .IsUnique();
 
-                    b.HasIndex("RestaurantId", "ModerationStatus");
+                    b.HasIndex("RestaurantId", "ModerationStatus", "CreatedAt");
 
-                    b.ToTable("Reviews");
+                    b.ToTable("Reviews", t =>
+                        {
+                            t.HasCheckConstraint("CK_Review_Rating", "[Rating] BETWEEN 1 AND 5");
+                        });
                 });
 
             modelBuilder.Entity("RestaurantOrderingPlatform.Domain.Entities.ReviewReport", b =>
@@ -840,6 +994,10 @@ namespace RestaurantOrderingPlatform.Infrastructure.Migrations
                     b.HasIndex("RestaurantOwnerId");
 
                     b.HasIndex("ReviewId");
+
+                    b.HasIndex("ReviewId", "RestaurantOwnerId")
+                        .IsUnique()
+                        .HasFilter("[Status] = 'Open'");
 
                     b.ToTable("ReviewReports");
                 });
@@ -1137,8 +1295,7 @@ namespace RestaurantOrderingPlatform.Infrastructure.Migrations
                     b.HasOne("RestaurantOrderingPlatform.Domain.Entities.Address", "Address")
                         .WithMany()
                         .HasForeignKey("AddressId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("RestaurantOrderingPlatform.Domain.Entities.Coupon", "Coupon")
                         .WithMany()
